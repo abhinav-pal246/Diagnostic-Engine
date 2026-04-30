@@ -1,43 +1,27 @@
+import streamlit as st
 from dotenv import load_dotenv
 load_dotenv()
 
-import streamlit as st
 from langchain_core.messages import HumanMessage
 from graph.graph import diagnostic_graph
 from utils.export import export_pdf, export_pptx
 
-st.set_page_config(page_title="McKinsey Diagnostic Engine", layout="wide", page_icon="📊")
-st.title("📊 McKinsey Rapid Diagnostic Engine")
-st.divider()
+st.set_page_config(page_title="Company Diagnostic Engine", layout="wide")
+st.title("Company Rapid Diagnostic Engine")
 
-# ── Session state init ─────────────────────────────────────────
-for key, default in {
-    "research_output": "",
-    "financial_output": "",
-    "benchmarking_output": "",
-    "trends_output": "",
-    "synthesis_output": "",
-    "awaiting_review": False,
-    "report_ready": False,
-    "thread_id": "thread_1",
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = default
+query = st.text_input(
+    "Enter company or problem",
+    placeholder="e.g. Analyze Tata Steel's operational efficiency"
+)
 
-# ── Input ──────────────────────────────────────────────────────
-query = st.text_input("Enter company or problem", placeholder="e.g. Analyze Tata Steel's operational efficiency")
-
-if st.button("🚀 Run Diagnostic") and query:
-    # Reset everything
-    st.session_state.research_output = ""
-    st.session_state.financial_output = ""
-    st.session_state.benchmarking_output = ""
-    st.session_state.trends_output = ""
-    st.session_state.synthesis_output = ""
+if "state" not in st.session_state:
+    st.session_state.state = None
+if "thread_id" not in st.session_state:
+    st.session_state.thread_id = "thread_1"
+if "awaiting_review" not in st.session_state:
     st.session_state.awaiting_review = False
-    st.session_state.report_ready = False
-    st.session_state.thread_id = f"thread_{abs(hash(query))}"
 
+if st.button("Run Diagnostic") and query:
     initial_state = {
         "query": query,
         "research_output": "",
@@ -51,97 +35,78 @@ if st.button("🚀 Run Diagnostic") and query:
 
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
 
-    with st.spinner("Running all agents in parallel..."):
-        try:
-            # stream_mode="values" gives full state after every node write
-            for chunk in diagnostic_graph.stream(initial_state, config, stream_mode="values"):
-                if chunk.get("research_output"):
-                    st.session_state.research_output = chunk["research_output"]
-                if chunk.get("financial_output"):
-                    st.session_state.financial_output = chunk["financial_output"]
-                if chunk.get("benchmarking_output"):
-                    st.session_state.benchmarking_output = chunk["benchmarking_output"]
-                if chunk.get("trends_output"):
-                    st.session_state.trends_output = chunk["trends_output"]
+    with st.spinner("Running agents..."):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1: st.info(" Research...")
+        with col2: st.info(" Financial...")
+        with col3: st.info(" Benchmarking...")
+        with col4: st.info(" Trends...")
 
-            st.session_state.awaiting_review = True
+        # Run until interrupt (before synthesis)
+        result = diagnostic_graph.invoke(initial_state, config)
+        st.session_state.state = result
+        st.session_state.awaiting_review = True
 
-        except Exception as e:
-            st.error(f"Error: {e}")
+    col1.success(" Research done")
+    col2.success(" Financial done")
+    col3.success(" Benchmarking done")
+    col4.success(" Trends done")
 
-    st.rerun()
-
-# ── Human review ───────────────────────────────────────────────
-if st.session_state.awaiting_review:
-    st.subheader("🔍 Review Research Before Synthesis")
-
-    with st.expander("📋 Research findings", expanded=True):
-        st.write(st.session_state.research_output or "⚠️ No output")
-
-    with st.expander("💰 Financial snapshot", expanded=True):
-        st.write(st.session_state.financial_output or "⚠️ No output")
-
-    with st.expander("📊 Competitive benchmark", expanded=True):
-        st.write(st.session_state.benchmarking_output or "⚠️ No output")
-
-    with st.expander("📈 Industry trends", expanded=True):
-        st.write(st.session_state.trends_output or "⚠️ No output")
-
+# Human review section
+if st.session_state.awaiting_review and st.session_state.state:
+    state = st.session_state.state
     st.divider()
-    col1, col2 = st.columns(2)
+    st.subheader("Review Research Before Synthesis")
 
-    with col1:
-        if st.button("✅ Approve — Generate Report"):
+    with st.expander(" Research findings"):
+        st.write(state.get("research_output", ""))
+    with st.expander(" Financial snapshot"):
+        st.write(state.get("financial_output", ""))
+    with st.expander(" Competitive benchmark"):
+        st.write(state.get("benchmarking_output", ""))
+    with st.expander(" Industry trends"):
+        st.write(state.get("trends_output", ""))
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button(" Approve — Generate Report"):
             config = {"configurable": {"thread_id": st.session_state.thread_id}}
-            with st.spinner("Generating McKinsey report..."):
-                try:
-                    for chunk in diagnostic_graph.stream(None, config, stream_mode="values"):
-                        if chunk.get("synthesis_output"):
-                            st.session_state.synthesis_output = chunk["synthesis_output"]
-
-                    st.session_state.awaiting_review = False
-                    st.session_state.report_ready = True
-
-                except Exception as e:
-                    st.error(f"Synthesis error: {e}")
+            with st.spinner("Synthesizing Company report..."):
+                final = diagnostic_graph.invoke(None, config)
+                st.session_state.state = final
+                st.session_state.awaiting_review = False
             st.rerun()
-
-    with col2:
-        if st.button("🔄 Start Over"):
-            for key in ["research_output", "financial_output", "benchmarking_output",
-                        "trends_output", "synthesis_output"]:
-                st.session_state[key] = ""
+    with col_b:
+        if st.button(" Re-run Research"):
             st.session_state.awaiting_review = False
-            st.session_state.report_ready = False
+            st.session_state.state = None
             st.rerun()
 
-# ── Final report ───────────────────────────────────────────────
-if st.session_state.report_ready and st.session_state.synthesis_output:
+# Final report
+if (
+    st.session_state.state
+    and not st.session_state.awaiting_review
+    and st.session_state.state.get("synthesis_output")
+):
     st.divider()
-    st.subheader("📄 McKinsey Diagnostic Report")
-    st.markdown(st.session_state.synthesis_output)
+    st.subheader("Company Diagnostic Report")
+    st.markdown(st.session_state.state["synthesis_output"])
 
     st.divider()
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("📄 Export PDF"):
-            try:
-                path = export_pdf(query or "Diagnostic", st.session_state.synthesis_output)
-                with open(path, "rb") as f:
-                    st.download_button("⬇️ Download PDF", f,
-                                       file_name="diagnostic.pdf",
-                                       mime="application/pdf")
-            except Exception as e:
-                st.error(f"PDF error: {e}")
-
-    with col2:
-        if st.button("📊 Export PPTX"):
-            try:
-                path = export_pptx(query or "Diagnostic", st.session_state.synthesis_output)
-                with open(path, "rb") as f:
-                    st.download_button("⬇️ Download PPTX", f,
-                                       file_name="diagnostic.pptx",
-                                       mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-            except Exception as e:
-                st.error(f"PPTX error: {e}")
+    col_x, col_y = st.columns(2)
+    with col_x:
+        if st.button(" Export PDF"):
+            path = export_pdf(
+                st.session_state.state["query"],
+                st.session_state.state["synthesis_output"]
+            )
+            with open(path, "rb") as f:
+                st.download_button("Download PDF", f, file_name="diagnostic.pdf")
+    with col_y:
+        if st.button(" Export PPTX"):
+            path = export_pptx(
+                st.session_state.state["query"],
+                st.session_state.state["synthesis_output"]
+            )
+            with open(path, "rb") as f:
+                st.download_button("Download PPTX", f, file_name="diagnostic.pptx")

@@ -8,6 +8,10 @@ from agents.benchmarking_agent import benchmarking_node
 from agents.trends_agent import trends_node
 from agents.synthesis_agent import synthesis_node
 
+def human_review_node(state: AgentState) -> AgentState:
+    """Pause point — Streamlit will handle the actual review UI."""
+    return state
+
 def build_graph():
     g = StateGraph(AgentState)
 
@@ -16,28 +20,30 @@ def build_graph():
     g.add_node("financial", financial_node)
     g.add_node("benchmarking", benchmarking_node)
     g.add_node("trends", trends_node)
+    g.add_node("human_review", human_review_node)
     g.add_node("synthesis", synthesis_node)
 
     g.set_entry_point("supervisor")
 
-    # Supervisor fans out to all 4 agents
     g.add_edge("supervisor", "research")
     g.add_edge("supervisor", "financial")
     g.add_edge("supervisor", "benchmarking")
     g.add_edge("supervisor", "trends")
 
-    # All agents → synthesis directly
-    g.add_edge("research", "synthesis")
-    g.add_edge("financial", "synthesis")
-    g.add_edge("benchmarking", "synthesis")
-    g.add_edge("trends", "synthesis")
+    # All agents → human review → synthesis
+    g.add_edge("research", "human_review")
+    g.add_edge("financial", "human_review")
+    g.add_edge("benchmarking", "human_review")
+    g.add_edge("trends", "human_review")
 
+    g.add_edge("human_review", "synthesis")
     g.add_edge("synthesis", END)
 
+    # ← this enables HITL interruption
     checkpointer = MemorySaver()
     return g.compile(
         checkpointer=checkpointer,
-        interrupt_before=["synthesis"]  # ← HITL happens here
+        interrupt_before=["synthesis"]
     )
 
 diagnostic_graph = build_graph()

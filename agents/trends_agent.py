@@ -29,7 +29,7 @@ def trends_node(state: AgentState) -> AgentState:
     prompt = f"""You are an industry trends analyst at McKinsey.
 Summarize the top macro/sector trends relevant to "{query}".
 Focus on: technology shifts, regulatory changes, demand drivers.
-Format as 3-4 "So what?" insight bullets.
+Format as 3-4  insight bullets.
 
 Search results:
 {raw}"""
