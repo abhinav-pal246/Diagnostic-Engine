@@ -1,7 +1,11 @@
 langgraph
 langchain
 langchain-anthropic
+langchain-groq
+langchain-google-genai
 tavily-python
 chromadb
 streamlit
 python-dotenv
+fpdf2
+python-pptx

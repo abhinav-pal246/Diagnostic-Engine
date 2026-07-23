@@ -13,6 +13,7 @@ llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
 #llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)   # Instantiates gemini at module level  | reliable routing decisions, not creative ones.  therefore temp is zero
 
 
+#hi
 def research_node(state: AgentState) -> AgentState:
     query = state["query"]
 
