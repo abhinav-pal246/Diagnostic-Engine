@@ -9,7 +9,7 @@
 #Vector Storage: It converts text, images, or audio into "vectors" (mathematical coordinates).
 
 import os
-import shutil
+import tempfile
 import chromadb #vector database library for storing and retrieving text
 import hashlib #built-in Python library for generating hash values (like fingerprints for strings)
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
@@ -22,39 +22,20 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 embedding_fn = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
 # Downloads ~80MB on first run. Cached after that. Same model, same vector quality.
 
-CHROMA_PATH = "./chroma_db"
+# Use a writable path outside the repo. On Streamlit Cloud the mounted repo
+# is read-only, so the committed ./chroma_db (created with a different
+# embedding function) can't be deleted or migrated in place. Storing the
+# cache in a tmp dir sidesteps the read-only mount and the embedding-function
+# conflict — the cache is dev-convenience, not durable state.
+CHROMA_PATH = os.environ.get("CHROMA_PATH") or os.path.join(
+    tempfile.gettempdir(), "diagnostic_engine_chroma_db"
+)
 
-# The persisted collection may have been created with a different embedding
-# function (e.g. the default ONNX one), which is incompatible with the
-# SentenceTransformer function we use here — and on Python 3.14 the old ONNX
-# module can fail even to load, so `delete_collection` can raise too.
-# Fallback: nuke the on-disk store entirely and start clean. Cached vectors
-# from a different embedding model would be meaningless anyway.
-def _open_collection():
-    global client
-    try:
-        return client.get_or_create_collection(
-            "research_cache",
-            embedding_function=embedding_fn,
-        )
-    except Exception:
-        try:
-            client.delete_collection("research_cache")
-            return client.get_or_create_collection(
-                "research_cache",
-                embedding_function=embedding_fn,
-            )
-        except Exception:
-            if os.path.exists(CHROMA_PATH):
-                shutil.rmtree(CHROMA_PATH, ignore_errors=True)
-            client = chromadb.PersistentClient(path=CHROMA_PATH)
-            return client.get_or_create_collection(
-                "research_cache",
-                embedding_function=embedding_fn,
-            )
-
-client = chromadb.PersistentClient(path=CHROMA_PATH) #Creates a ChromaDB client that saves data to disk at the folder ./chroma_db. "Persistent" means data survives after your program closes (unlike in-memory storage).
-collection = _open_collection() #this one stores all your cached research.
+client = chromadb.PersistentClient(path=CHROMA_PATH)
+collection = client.get_or_create_collection(
+    "research_cache",
+    embedding_function=embedding_fn,
+) #this one stores all your cached research.
 
 def get_cache_key(query: str) -> str:
     return hashlib.md5(query.lower().strip().encode()).hexdigest() #md5 requires bytes  query.lower().strip().encode() is method chaining 
