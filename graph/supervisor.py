@@ -7,7 +7,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage #a special wrapper that tells Claude "this message is coming from a human/user." gemini expects messages to be labeled by who sent them (Human, AI, System).
 from graph.state import AgentState #Google Doc that all agents can read and write to
 
-llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, max_retries=5)
 #llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0) # Instantiates gemini at module level  | reliable routing decisions, not creative ones.  therefore temp is zero
 
 #instruction manual you give Gemini.

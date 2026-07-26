@@ -8,7 +8,7 @@ from utils.search import search_web  #Tavily ke responses in list forms  import 
 # chromaDB stuff
 from utils.chroma_store import save_research, load_research
 
-llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, max_retries=5)
 #llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)   # Instantiates gemini at module level  | reliable routing decisions, not creative ones.  therefore temp is zero
 
 
