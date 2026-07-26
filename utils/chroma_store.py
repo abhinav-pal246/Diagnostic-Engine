@@ -8,6 +8,8 @@
 #unlike row and column
 #Vector Storage: It converts text, images, or audio into "vectors" (mathematical coordinates).
 
+import os
+import shutil
 import chromadb #vector database library for storing and retrieving text
 import hashlib #built-in Python library for generating hash values (like fingerprints for strings)
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
@@ -20,27 +22,38 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 embedding_fn = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
 # Downloads ~80MB on first run. Cached after that. Same model, same vector quality.
 
-client = chromadb.PersistentClient(path="./chroma_db") #Creates a ChromaDB client that saves data to disk at the folder ./chroma_db. "Persistent" means data survives after your program closes (unlike in-memory storage).
+CHROMA_PATH = "./chroma_db"
 
 # The persisted collection may have been created with a different embedding
-# function (e.g. the default ONNX one). Switching embedding models makes the
-# old vectors meaningless anyway, so on conflict we drop the collection and
-# recreate it with our safe SentenceTransformer function.
+# function (e.g. the default ONNX one), which is incompatible with the
+# SentenceTransformer function we use here — and on Python 3.14 the old ONNX
+# module can fail even to load, so `delete_collection` can raise too.
+# Fallback: nuke the on-disk store entirely and start clean. Cached vectors
+# from a different embedding model would be meaningless anyway.
 def _open_collection():
+    global client
     try:
         return client.get_or_create_collection(
             "research_cache",
             embedding_function=embedding_fn,
         )
-    except ValueError as e:
-        if "embedding function" in str(e).lower():
+    except Exception:
+        try:
             client.delete_collection("research_cache")
             return client.get_or_create_collection(
                 "research_cache",
                 embedding_function=embedding_fn,
             )
-        raise
+        except Exception:
+            if os.path.exists(CHROMA_PATH):
+                shutil.rmtree(CHROMA_PATH, ignore_errors=True)
+            client = chromadb.PersistentClient(path=CHROMA_PATH)
+            return client.get_or_create_collection(
+                "research_cache",
+                embedding_function=embedding_fn,
+            )
 
+client = chromadb.PersistentClient(path=CHROMA_PATH) #Creates a ChromaDB client that saves data to disk at the folder ./chroma_db. "Persistent" means data survives after your program closes (unlike in-memory storage).
 collection = _open_collection() #this one stores all your cached research.
 
 def get_cache_key(query: str) -> str:
