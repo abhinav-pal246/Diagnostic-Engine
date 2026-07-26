@@ -21,10 +21,27 @@ embedding_fn = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2
 # Downloads ~80MB on first run. Cached after that. Same model, same vector quality.
 
 client = chromadb.PersistentClient(path="./chroma_db") #Creates a ChromaDB client that saves data to disk at the folder ./chroma_db. "Persistent" means data survives after your program closes (unlike in-memory storage).
-collection = client.get_or_create_collection(
-    "research_cache",
-    embedding_function=embedding_fn  # ← pass our safe embedding function here
-) #this one stores all your cached research.
+
+# The persisted collection may have been created with a different embedding
+# function (e.g. the default ONNX one). Switching embedding models makes the
+# old vectors meaningless anyway, so on conflict we drop the collection and
+# recreate it with our safe SentenceTransformer function.
+def _open_collection():
+    try:
+        return client.get_or_create_collection(
+            "research_cache",
+            embedding_function=embedding_fn,
+        )
+    except ValueError as e:
+        if "embedding function" in str(e).lower():
+            client.delete_collection("research_cache")
+            return client.get_or_create_collection(
+                "research_cache",
+                embedding_function=embedding_fn,
+            )
+        raise
+
+collection = _open_collection() #this one stores all your cached research.
 
 def get_cache_key(query: str) -> str:
     return hashlib.md5(query.lower().strip().encode()).hexdigest() #md5 requires bytes  query.lower().strip().encode() is method chaining 
